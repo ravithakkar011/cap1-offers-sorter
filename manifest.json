@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Capital One Offers Sorter",
+  "version": "1.0.0",
+  "description": "Sort Capital One offers by number of miles or multiplier to find the best deals quickly.",
+  "action": {
+    "default_popup": "dist/index.html",
+    "default_title": "Capital One Offers Sorter"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.capitaloneoffers.com/*"
+  ],
+  "background": {
+    "service_worker": "dist/background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["dist/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
