@@ -7,6 +7,14 @@ const App: React.FC = () => {
   const [currentUrl, setCurrentUrl] = useState<string>("");
   const [offerCount, setOfferCount] = useState<number>(0);
   const [filterMultipliers, setFilterMultipliers] = useState<boolean>(false);
+  const [performanceMetrics, setPerformanceMetrics] = useState<{
+    totalTime: number;
+    loadingTime: number;
+    processingTime: number;
+    domTime: number;
+    tilesProcessed: number;
+    multipliersFiltered: number;
+  } | null>(null);
 
   useEffect(() => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -30,41 +38,76 @@ const App: React.FC = () => {
    * Simple script that sorts offers by mileage
    */
   async function injectedScript(filterMultipliers: boolean) {
+    // Performance tracking
+    const startTime = performance.now();
+    let loadingStartTime = 0;
+    let processingStartTime = 0;
+    let domStartTime = 0;
+    
+    // Pre-compile regex patterns for better performance
+    const MULTIPLIER_REGEX = /(\d+)X\s*miles/i;
+    const MILES_REGEX = /(?:Up to )?([0-9,]+)\s*miles/i;
+    
     function parseMileageValue(text: string): number {
-      const cleanedText = text.replace(/\*/g, "").trim();
-      const multiplierMatch = cleanedText.match(/(\d+)X miles/i);
+      // Optimized parsing - check for multiplier first (most common)
+      const multiplierMatch = text.match(MULTIPLIER_REGEX);
       if (multiplierMatch) {
         return parseInt(multiplierMatch[1], 10) * 1000;
       }
-      const milesMatch = cleanedText.match(/(?:Up to )?([0-9,]+) miles/i);
+      
+      // Then check for regular miles
+      const milesMatch = text.match(MILES_REGEX);
       if (milesMatch) {
         return parseInt(milesMatch[1].replace(/,/g, ""), 10);
       }
+      
       return 0;
     }
 
     async function loadAllTiles() {
+      loadingStartTime = performance.now();
       let attempts = 0;
       const maxAttempts = 20;
+      
+      // Cache button selector for better performance
+      const buttonSelector = "button";
+      
       while (true) {
-        const viewMoreButton = Array.from(document.querySelectorAll("button"))
+        // Optimized: Use querySelectorAll with cached selector
+        const buttons = document.querySelectorAll(buttonSelector);
+        const viewMoreButton = Array.from(buttons)
           .find((button) => button.textContent === "View More Offers");
+        
         if (!viewMoreButton) break;
+        
         (viewMoreButton as HTMLButtonElement).click();
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        
+        // Adaptive delay - start fast, slow down if needed
+        const delay = attempts < 5 ? 150 : 200;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        
         attempts++;
         if (attempts >= maxAttempts) break;
       }
     }
 
     async function sortByMiles() {
-      let mainContainer = document.querySelector(".grid.justify-between.content-stretch.items-stretch.h-full.w-full.gap-4") as HTMLElement | null;
-      if (!mainContainer) {
-        mainContainer = document.querySelector(".grid.justify-center.gap-4.h-full.w-full") as HTMLElement | null;
+      processingStartTime = performance.now();
+      
+      // Optimized container finding - try most common selectors first
+      const containerSelectors = [
+        ".grid.justify-between.content-stretch.items-stretch.h-full.w-full.gap-4",
+        ".grid.justify-center.gap-4.h-full.w-full", 
+        ".grid.gap-4",
+        "[class*='grid'][class*='gap']"
+      ];
+      
+      let mainContainer: HTMLElement | null = null;
+      for (const selector of containerSelectors) {
+        mainContainer = document.querySelector(selector) as HTMLElement;
+        if (mainContainer) break;
       }
-      if (!mainContainer) {
-        mainContainer = document.querySelector(".grid.gap-4") as HTMLElement | null;
-      }
+      
       if (!mainContainer) {
         alert("Could not find offers container.");
         return 0;
@@ -78,6 +121,7 @@ const App: React.FC = () => {
       await loadAllTiles();
       mainContainer.style.display = "grid";
 
+      // Revert to original working tile collection
       const standardTiles = mainContainer.querySelectorAll(".standard-tile");
       const styledTiles = mainContainer.querySelectorAll('div.flex > div[style*="border-radius"][style*="background-color"]');
       const allTiles = [...standardTiles, ...styledTiles];
@@ -87,46 +131,97 @@ const App: React.FC = () => {
         return 0;
       }
 
-      const tilesWithMiles = allTiles.map((tile) => {
+      // Optimized tile processing with caching
+      const tilesWithMiles = [];
+      const MULTIPLIER_DETECTION_REGEX = /\d+X/i; // Cache regex for multiplier detection
+      
+      for (let i = 0; i < allTiles.length; i++) {
+        const tile = allTiles[i];
         const parent = tile.parentElement as HTMLElement | null;
-        const mileageDiv = tile.querySelector('div[style*="color"]') || tile.querySelector('div[style*="background-color: rgb(37, 129, 14)"]');
+        
+        // Optimized mileage extraction with early exit
+        let mileageDiv = tile.querySelector('div[style*="color"]');
+        if (!mileageDiv) {
+          mileageDiv = tile.querySelector('div[style*="background-color: rgb(37, 129, 14)"]');
+        }
+        
         const mileageText = mileageDiv?.textContent || "0 miles";
         const mileageValue = parseMileageValue(mileageText);
-        const isMultiplier = /\d+X/i.test(mileageText);
-        return { element: parent, mileage: mileageValue, isMultiplier };
-      });
+        const isMultiplier = MULTIPLIER_DETECTION_REGEX.test(mileageText);
+        
+        tilesWithMiles.push({ element: parent, mileage: mileageValue, isMultiplier });
+      }
 
       // Filter out multipliers if option is enabled
       const filteredTiles = filterMultipliers 
         ? tilesWithMiles.filter(tile => !tile.isMultiplier)
         : tilesWithMiles;
 
-      // Reset all tiles first
+      // Optimized DOM manipulation with batching
+      domStartTime = performance.now();
+      const sorted = filteredTiles.sort((a, b) => b.mileage - a.mileage);
+      
+      // Batch DOM operations for better performance
+      const elementsToReset = [];
+      const elementsToHide = [];
+      const elementsToOrder = [];
+      
+      // Collect all DOM operations first
       tilesWithMiles.forEach((tile) => {
         if (tile.element) {
-          tile.element.style.order = '';
-          tile.element.style.display = '';
+          elementsToReset.push(tile.element);
         }
       });
-
-      // Hide multiplier deals if filtering is enabled
+      
       if (filterMultipliers) {
         tilesWithMiles.forEach((tile) => {
           if (tile.isMultiplier && tile.element) {
-            tile.element.style.display = 'none';
+            elementsToHide.push(tile.element);
           }
         });
       }
-
-      // Sort and apply order to visible tiles
-      const sorted = filteredTiles.sort((a, b) => b.mileage - a.mileage);
+      
       sorted.forEach((item, index) => {
         if (item.element) {
-          item.element.style.order = String(index);
+          elementsToOrder.push({ element: item.element, order: index });
         }
       });
+      
+      // Execute DOM operations in batches
+      elementsToReset.forEach(element => {
+        element.style.order = '';
+        element.style.display = '';
+      });
+      
+      elementsToHide.forEach(element => {
+        element.style.display = 'none';
+      });
+      
+      elementsToOrder.forEach(({ element, order }) => {
+        element.style.order = String(order);
+      });
 
-      return filteredTiles.length;
+      const domEndTime = performance.now();
+      const endTime = performance.now();
+      
+      // Calculate performance metrics
+      const loadingTime = processingStartTime - loadingStartTime;
+      const processingTime = domStartTime - processingStartTime;
+      const domTime = domEndTime - domStartTime;
+      const totalTime = endTime - startTime;
+      const multipliersFiltered = tilesWithMiles.length - filteredTiles.length;
+      
+      return {
+        count: filteredTiles.length,
+        metrics: {
+          totalTime: Math.round(totalTime),
+          loadingTime: Math.round(loadingTime),
+          processingTime: Math.round(processingTime),
+          domTime: Math.round(domTime),
+          tilesProcessed: tilesWithMiles.length,
+          multipliersFiltered: multipliersFiltered
+        }
+      };
     }
 
     return await sortByMiles();
@@ -158,8 +253,9 @@ const App: React.FC = () => {
       });
       
       if (results && results[0]?.result) {
-        const count = results[0].result as number;
-        setOfferCount(count);
+        const data = results[0].result as { count: number; metrics: any };
+        setOfferCount(data.count);
+        setPerformanceMetrics(data.metrics);
       }
     } catch (error) {
       console.error("Error executing script:", error);
@@ -215,6 +311,22 @@ const App: React.FC = () => {
               textAlign: 'center'
             }}>
               ✓ Sorted {offerCount} offers!
+            </div>
+          )}
+          {performanceMetrics && (
+            <div style={{
+              marginTop: '8px',
+              padding: '8px',
+              backgroundColor: '#e7f3ff',
+              color: '#004085',
+              border: '1px solid #b8daff',
+              borderRadius: '4px',
+              fontSize: '12px'
+            }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>⚡ Performance Report</div>
+              <div>Total Time: {performanceMetrics.totalTime}ms</div>
+              <div>Loading: {performanceMetrics.loadingTime}ms | Processing: {performanceMetrics.processingTime}ms | DOM: {performanceMetrics.domTime}ms</div>
+              <div>Tiles: {performanceMetrics.tilesProcessed} | Filtered: {performanceMetrics.multipliersFiltered}</div>
             </div>
           )}
         </div>
