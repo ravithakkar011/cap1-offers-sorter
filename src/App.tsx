@@ -162,9 +162,9 @@ const App: React.FC = () => {
       const sorted = filteredTiles.sort((a, b) => b.mileage - a.mileage);
       
       // Batch DOM operations for better performance
-      const elementsToReset = [];
-      const elementsToHide = [];
-      const elementsToOrder = [];
+      const elementsToReset: HTMLElement[] = [];
+      const elementsToHide: HTMLElement[] = [];
+      const elementsToOrder: { element: HTMLElement; order: number }[] = [];
       
       // Collect all DOM operations first
       tilesWithMiles.forEach((tile) => {
