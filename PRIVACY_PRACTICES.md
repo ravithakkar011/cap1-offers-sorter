@@ -89,7 +89,7 @@ I certify that this extension's data usage complies with Chrome Web Store Develo
 
 ---
 
-**Developer**: [Your Name]  
+**Developer**: Ravi Thakkar
 **Extension Version**: 1.0.0  
-**Last Updated**: [Current Date]  
+**Last Updated**: 10-25-2025
 **Compliance Verified**: ✅
