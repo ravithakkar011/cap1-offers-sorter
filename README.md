@@ -4,7 +4,7 @@ A Chrome extension built with TypeScript and React that automatically sorts Capi
 
 This project features comprehensive TypeScript typing, detailed console logging for debugging, and multiple DOM detection strategies to ensure reliable offer parsing. The extension only runs on Capital One domains, doesn't collect any data, and stores preferences locally. Built with modern web technologies including Vite for fast development and React for a clean popup interface.
 
-**Shoutout to [noritheshibadev](https://github.com/noritheshibadev) for giving me this cool small project to work on!** 🚀
+**Shoutout to [noritheshibadev](https://github.com/noritheshibadev) for giving me the inspiration for this cool small project to work on!** 🚀
 
 ## Quick Start
 
